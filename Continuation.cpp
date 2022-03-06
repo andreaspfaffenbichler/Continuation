@@ -9,7 +9,7 @@ using namespace std;
 
 namespace
 {
-	struct TaskPromiseBase
+	struct ContinuationPromiseBase
 	{
 		struct FinalAwaitable
 		{
@@ -18,21 +18,21 @@ namespace
 			template<typename PROMISE>
 				void await_suspend( std::coroutine_handle< PROMISE > coroutine) noexcept
 				{
-					TaskPromiseBase& promise = coroutine.promise();
+					ContinuationPromiseBase& promise = coroutine.promise();
 					if( promise.continuation_ )
 						promise.continuation_.resume();
 				}
 			void await_resume() noexcept {}
 		};
 
-		TaskPromiseBase() noexcept {}
+		ContinuationPromiseBase() noexcept {}
 		auto initial_suspend() noexcept { return std::suspend_never{}; }
 		auto final_suspend() noexcept { return FinalAwaitable{}; }
 		std::coroutine_handle<> continuation_;
 	};
 
 	template< typename TASK >
-		struct TaskPromise : TaskPromiseBase
+		struct ContinuationPromise : ContinuationPromiseBase
 		{
 			TASK get_return_object() 
 			{
@@ -44,22 +44,22 @@ namespace
 		};
 
 	template< typename R >
-	struct [[nodiscard]] Task 
+	struct [[nodiscard]] Continuation 
 	{
 		using RESULT_TYPE = R;
-		using TASK = Task< R >;
-		using promise_type = TaskPromise< TASK >;
+		using TASK = Continuation< R >;
+		using promise_type = ContinuationPromise< TASK >;
 		using CoroutineHandle = std::coroutine_handle< promise_type >;
 
-		Task(const Task&) = delete;
-		Task& operator=(const Task&) = delete;
-		Task(Task&& t) noexcept { coroutine_(t.coroutine_); }
-		Task& operator=(Task&& t) noexcept = delete;
+		Continuation(const Continuation&) = delete;
+		Continuation& operator=(const Continuation&) = delete;
+		Continuation(Continuation&& t) noexcept { coroutine_(t.coroutine_); }
+		Continuation& operator=(Continuation&& t) noexcept = delete;
 
-		explicit Task( CoroutineHandle coroutine ) 
+		explicit Continuation( CoroutineHandle coroutine ) 
 			: coroutine_( coroutine ) 
 		{}
-		~Task()
+		~Continuation()
 		{
 			if( coroutine_ )
 				coroutine_.destroy();
@@ -67,7 +67,7 @@ namespace
 
 		bool await_ready() const noexcept
 		{
-			return !coroutine_ || coroutine_.done();
+			return false;
 		}
 		void await_suspend( std::coroutine_handle<> awaitingCoroutine ) noexcept
 		{
@@ -131,7 +131,7 @@ namespace
 		});
 	}
 
-	Task< int > Test1X()
+	Continuation< int > Test1X()
 	{
 		BOOST_TEST_MESSAGE( "Start Test1X" );
 		int x = co_await CallAsync< int >( &api );
@@ -141,7 +141,7 @@ namespace
 		co_return x += 1;
 	}
 
-	Task< double > Test1aX()
+	Continuation< double > Test1aX()
 	{
 		BOOST_TEST_MESSAGE( "Start Test1aX" );
 		int x = co_await Test1X();
@@ -151,7 +151,7 @@ namespace
 		co_return x + 1.0;
 	}
 
-	Task< nullptr_t > Test2X()
+	Continuation< nullptr_t > Test2X()
 	{
 		BOOST_TEST_MESSAGE( "Start Test2X" );
 		auto x = co_await Test1aX();
