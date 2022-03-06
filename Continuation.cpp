@@ -247,7 +247,9 @@ namespace
 
 int main()
 {
+	BOOST_TEST_MESSAGE( "main start" );
 	auto test = Test2X();
+	BOOST_TEST_MESSAGE( "main after Test2X" );
 	test.resume();
 	BOOST_TEST_MESSAGE( "main after resume" );
 //	auto run = Test2X().resume();
