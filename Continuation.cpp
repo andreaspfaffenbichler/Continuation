@@ -31,24 +31,24 @@ namespace
 		std::coroutine_handle<> continuation_;
 	};
 
-	template< typename TASK >
+	template< typename CONTINUATION >
 		struct ContinuationPromise : ContinuationPromiseBase
 		{
-			TASK get_return_object() 
+			CONTINUATION get_return_object() 
 			{
-				return TASK{ TASK::CoroutineHandle::from_promise( *this ) };
+				return CONTINUATION{ CONTINUATION::CoroutineHandle::from_promise( *this ) };
 			}
 			void unhandled_exception() { }
-			void return_value( TASK::RESULT_TYPE result ) { result_ = result; }
-			TASK::RESULT_TYPE result_ = {}; 
+			void return_value( CONTINUATION::RESULT_TYPE result ) { result_ = result; }
+			CONTINUATION::RESULT_TYPE result_ = {}; 
 		};
 
 	template< typename R >
 	struct [[nodiscard]] Continuation 
 	{
 		using RESULT_TYPE = R;
-		using TASK = Continuation< R >;
-		using promise_type = ContinuationPromise< TASK >;
+		using CONTINUATION = Continuation< R >;
+		using promise_type = ContinuationPromise< CONTINUATION >;
 		using CoroutineHandle = std::coroutine_handle< promise_type >;
 
 		Continuation(const Continuation&) = delete;
