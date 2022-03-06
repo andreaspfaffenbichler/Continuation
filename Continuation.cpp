@@ -53,14 +53,14 @@ namespace
 
 		Task(const Task&) = delete;
 		Task& operator=(const Task&) = delete;
-		Task(Task&& t) noexcept : coroutine_(t.coroutine_) { t.coroutine_ = {}; }
-		Task& operator=(Task&& t) noexcept {
-			if (this == &t) return *this;
-			if (coroutine_) coroutine_.destroy();
-			coroutine_ = t.coroutine_;
-			t.coroutine_ = {};
-			return *this;
-		}
+		Task(Task&& t) noexcept = delete; //: coroutine_(t.coroutine_) { t.coroutine_ = {}; }
+		Task& operator=(Task&& t) noexcept = delete; // {
+		//	if (this == &t) return *this;
+		//	if (coroutine_) coroutine_.destroy();
+		//	coroutine_ = t.coroutine_;
+		//	t.coroutine_ = {};
+		//	return *this;
+		//}
 		explicit Task( CoroutineHandle coroutine ) 
 			: coroutine_( coroutine ) 
 		{}
