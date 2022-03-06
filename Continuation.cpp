@@ -49,8 +49,8 @@ namespace
 			: state_( false )
 		{}
 
-		auto initial_suspend() noexcept { return Start{}; }
-		//auto initial_suspend() noexcept { return std::suspend_always{}; }
+		//auto initial_suspend() noexcept { return Start{}; }
+		auto initial_suspend() noexcept { return std::suspend_never{}; }
 		auto final_suspend() noexcept { return FinalAwaitable{}; }
 
 		bool set_continuation( std::coroutine_handle<> continuation )
@@ -102,73 +102,18 @@ namespace
 			if( coroutine_ )
 				coroutine_.destroy();
 		}
-//		void destroy() { coroutine_.destroy(); }
-		void resume() { coroutine_.resume(); }
 
-		struct AwaitableBase
+		bool await_ready() const noexcept
 		{
-			using CoroutineHandle = std::coroutine_handle< promise_type >;
-			CoroutineHandle coroutine_;
-
-			AwaitableBase( CoroutineHandle coroutine ) noexcept
-				: coroutine_( coroutine )
-			{}
-
-			bool await_ready() const noexcept
-			{
-				return !coroutine_ || coroutine_.done();
-			}
-
-			bool await_suspend( std::coroutine_handle<> awaitingCoroutine ) noexcept
-			{
-				// NOTE: We are using the bool-returning version of await_suspend() here
-				// to work around a potential stack-overflow issue if a coroutine
-				// awaits many synchronously-completing tasks in a loop.
-				//
-				// We first start the task by calling resume() and then conditionally
-				// attach the continuation if it has not already completed. This allows us
-				// to immediately resume the awaiting coroutine without increasing
-				// the stack depth, avoiding the stack-overflow problem. However, it has
-				// the down-side of requiring a std::atomic to arbitrate the race between
-				// the coroutine potentially completing on another thread concurrently
-				// with registering the continuation on this thread.
-				//
-				// We can eliminate the use of the std::atomic once we have access to
-				// coroutine_handle-returning await_suspend() on both MSVC and Clang
-				// as this will provide ability to suspend the awaiting coroutine and
-				// resume another coroutine with a guaranteed tail-call to resume().
-				//coroutine_.resume();
-				return coroutine_.promise().set_continuation( awaitingCoroutine );
-			}
-		};
-
-		auto operator co_await() const & noexcept
-		{
-			struct Awaitable : AwaitableBase
-			{
-				using AwaitableBase::AwaitableBase;
-				decltype(auto) await_resume()
-				{
-					if( !this->coroutine_ )
-						throw std::logic_error{ "!this->m_coroutine"};
-					return this->coroutine_.promise().result_; 
-				}
-			};
-			return Awaitable{ coroutine_ };
+			return !coroutine_ || coroutine_.done();
 		}
-		auto operator co_await() const && noexcept
+		bool await_suspend( std::coroutine_handle<> awaitingCoroutine ) noexcept
 		{
-			struct Awaitable : AwaitableBase
-			{
-				using AwaitableBase::AwaitableBase;
-				decltype(auto) await_resume()
-				{
-					if( !this->coroutine_ )
-						throw std::logic_error{ "!this->m_coroutine"};
-					return this->coroutine_.promise().result_; 
-				}
-			};
-			return Awaitable{ coroutine_ };
+			return coroutine_.promise().set_continuation( awaitingCoroutine );
+		}
+		auto await_resume()
+		{
+			return coroutine_.promise().result_; 
 		}
 
 	private:
