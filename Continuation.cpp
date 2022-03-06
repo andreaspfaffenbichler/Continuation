@@ -11,9 +11,9 @@ namespace
 {
 	struct ContinuationPromiseBase
 	{
-		struct FinalAwaitable
+		struct ResumeContinuation
 		{
-			FinalAwaitable() noexcept {}
+			ResumeContinuation() noexcept {}
 			bool await_ready() const noexcept { return false; }
 			template<typename PROMISE>
 				void await_suspend( std::coroutine_handle< PROMISE > coroutine) noexcept
@@ -24,10 +24,9 @@ namespace
 				}
 			void await_resume() noexcept {}
 		};
-
 		ContinuationPromiseBase() noexcept {}
 		auto initial_suspend() noexcept { return std::suspend_never{}; }
-		auto final_suspend() noexcept { return FinalAwaitable{}; }
+		auto final_suspend() noexcept { return ResumeContinuation{}; }
 		std::coroutine_handle<> continuation_;
 	};
 
@@ -51,11 +50,11 @@ namespace
 		using promise_type = ContinuationPromise< CONTINUATION >;
 		using CoroutineHandle = std::coroutine_handle< promise_type >;
 
-		Continuation(const Continuation&) = delete;
-		Continuation& operator=(const Continuation&) = delete;
-		Continuation(Continuation&& t) noexcept { coroutine_(t.coroutine_); }
-		Continuation& operator=(Continuation&& t) noexcept = delete;
+		Continuation( const Continuation& ) = delete;
+		Continuation& operator=( const Continuation& ) = delete;
+		Continuation& operator=( Continuation&& ) noexcept = delete;
 
+		Continuation( Continuation&& t ) noexcept { coroutine_(t.coroutine_); }
 		explicit Continuation( CoroutineHandle coroutine ) 
 			: coroutine_( coroutine ) 
 		{}
@@ -84,11 +83,10 @@ namespace
 
 	template< typename R > using Callback = std::function< void( R ) >;
 	template< typename R > using Api = std::function< void( Callback< R > ) >;
-
 	template< typename R >
-		struct CallAsyncAwaiter
+		struct CallbackContinuationAwaiter
 		{
-			CallAsyncAwaiter( const Api< R > &api )
+			CallbackContinuationAwaiter( const Api< R > &api )
 				:api_( api ) {}
 
 			bool await_ready() { return false; }
@@ -105,11 +103,10 @@ namespace
 			const Api< R > api_;
 			R result_ = {};
 		};
-	
 	template< typename R >
-		auto CallAsync( Api< R > api )
+		auto CallbackContinuation( Api< R > api )
 		{
-			return CallAsyncAwaiter< R >{ api };
+			return CallbackContinuationAwaiter< R >{ api };
 		}
 
 // TEST
@@ -134,7 +131,7 @@ namespace
 	Continuation< int > Test1X()
 	{
 		BOOST_TEST_MESSAGE( "Start Test1X" );
-		int x = co_await CallAsync< int >( &api );
+		int x = co_await CallbackContinuation< int >( &api );
 		//BOOST_TEST( x == 42 );
 		BOOST_TEST( x == 42 );
 		BOOST_TEST_MESSAGE( "Test1X" );
