@@ -163,13 +163,10 @@ int main()
 {
 	BOOST_TEST_MESSAGE( "main start" );
 	auto test = Test2X();
-//	Test2X();
 	BOOST_TEST_MESSAGE( "main after Test2X" );
-//	test.resume();
-	BOOST_TEST_MESSAGE( "main after resume" );
-//	auto run = Test2X().resume();
 	std::this_thread::sleep_for( std::chrono::seconds{ 1 } );
 	BOOST_TEST_MESSAGE( "main after sleep" );
 	t.join();
+	BOOST_TEST_MESSAGE( "after join" );
 }
 
