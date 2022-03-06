@@ -11,18 +11,6 @@ namespace
 {
 	struct TaskPromiseBase
 	{
-		struct Start
-		{
-			Start() noexcept {}
-			bool await_ready() const noexcept { return false; }
-			template<typename PROMISE>
-				void await_suspend( std::coroutine_handle< PROMISE > coroutine) noexcept
-				{
-					coroutine.resume();
-				}
-			void await_resume() noexcept {}
-		};
-
 		struct FinalAwaitable
 		{
 			FinalAwaitable() noexcept {}
@@ -31,37 +19,16 @@ namespace
 				void await_suspend( std::coroutine_handle< PROMISE > coroutine) noexcept
 				{
 					TaskPromiseBase& promise = coroutine.promise();
-					// Use 'release' memory semantics in case we finish before the
-					// awaiter can suspend so that the awaiting thread sees our
-					// writes to the resulting value.
-					// Use 'acquire' memory semantics in case the caller registered
-					// the continuation before we finished. Ensure we see their write
-					// to m_continuation.
-					if( promise.state_.exchange(true, std::memory_order_acq_rel) )
-					{
+					if( promise.continuation_ )
 						promise.continuation_.resume();
-					}
 				}
 			void await_resume() noexcept {}
 		};
 
-		TaskPromiseBase() noexcept
-			: state_( false )
-		{}
-
-		//auto initial_suspend() noexcept { return Start{}; }
+		TaskPromiseBase() noexcept {}
 		auto initial_suspend() noexcept { return std::suspend_never{}; }
 		auto final_suspend() noexcept { return FinalAwaitable{}; }
-
-		bool set_continuation( std::coroutine_handle<> continuation )
-		{
-			continuation_ = continuation;
-			return !state_.exchange( true, std::memory_order_acq_rel );
-		}
-
-	private:
 		std::coroutine_handle<> continuation_;
-		std::atomic< bool > state_;
 	};
 
 	template< typename TASK >
@@ -107,9 +74,9 @@ namespace
 		{
 			return !coroutine_ || coroutine_.done();
 		}
-		bool await_suspend( std::coroutine_handle<> awaitingCoroutine ) noexcept
+		void await_suspend( std::coroutine_handle<> awaitingCoroutine ) noexcept
 		{
-			return coroutine_.promise().set_continuation( awaitingCoroutine );
+			coroutine_.promise().continuation_ = awaitingCoroutine;
 		}
 		auto await_resume()
 		{
