@@ -11,6 +11,18 @@ namespace
 {
 	struct TaskPromiseBase
 	{
+		struct Start
+		{
+			Start() noexcept {}
+			bool await_ready() const noexcept { return false; }
+			template<typename PROMISE>
+				void await_suspend( std::coroutine_handle< PROMISE > coroutine) noexcept
+				{
+					coroutine.resume();
+				}
+			void await_resume() noexcept {}
+		};
+
 		struct FinalAwaitable
 		{
 			FinalAwaitable() noexcept {}
@@ -37,7 +49,8 @@ namespace
 			: state_( false )
 		{}
 
-		auto initial_suspend() noexcept { return std::suspend_always{}; }
+		auto initial_suspend() noexcept { return Start{}; }
+		//auto initial_suspend() noexcept { return std::suspend_always{}; }
 		auto final_suspend() noexcept { return FinalAwaitable{}; }
 
 		bool set_continuation( std::coroutine_handle<> continuation )
@@ -89,7 +102,7 @@ namespace
 			if( coroutine_ )
 				coroutine_.destroy();
 		}
-		void destroy() { coroutine_.destroy(); }
+//		void destroy() { coroutine_.destroy(); }
 		void resume() { coroutine_.resume(); }
 
 		struct AwaitableBase
@@ -124,7 +137,7 @@ namespace
 				// coroutine_handle-returning await_suspend() on both MSVC and Clang
 				// as this will provide ability to suspend the awaiting coroutine and
 				// resume another coroutine with a guaranteed tail-call to resume().
-				coroutine_.resume();
+				//coroutine_.resume();
 				return coroutine_.promise().set_continuation( awaitingCoroutine );
 			}
 		};
@@ -231,7 +244,7 @@ namespace
 		//BOOST_TEST( x == 42 );
 		BOOST_TEST( x == 43 );
 		BOOST_TEST_MESSAGE( "Test1aX" );
-		co_return x += 1.0;
+		co_return x + 1.0;
 	}
 
 	Task< nullptr_t > Test2X()
@@ -249,11 +262,13 @@ int main()
 {
 	BOOST_TEST_MESSAGE( "main start" );
 	auto test = Test2X();
+//	Test2X();
 	BOOST_TEST_MESSAGE( "main after Test2X" );
-	test.resume();
+//	test.resume();
 	BOOST_TEST_MESSAGE( "main after resume" );
 //	auto run = Test2X().resume();
 	std::this_thread::sleep_for( std::chrono::seconds{ 1 } );
+	BOOST_TEST_MESSAGE( "main after sleep" );
 	t.join();
 }
 
