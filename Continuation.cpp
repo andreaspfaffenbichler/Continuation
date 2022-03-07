@@ -3,55 +3,44 @@
 #include <thread>
 #include <functional>
 
-using namespace std;
-
-#pragma optimize ( "", off )
-
 namespace
 {
-	template< typename CONTINUATION >
-		struct ContinuationPromise
+	template< typename R >
+	struct [[nodiscard]] Continuation 
+	{
+		struct promise_type
 		{
-			CONTINUATION get_return_object() 
+			Continuation< R > get_return_object() 
 			{
-				return CONTINUATION{ CONTINUATION::CoroutineHandle::from_promise( *this ) };
+				return Continuation< R >{ std::coroutine_handle< promise_type >::from_promise( *this ) };
 			}
 			struct ResumeContinuation
 			{
 				ResumeContinuation() noexcept {}
 				bool await_ready() const noexcept { return false; }
-				template<typename PROMISE>
-					void await_suspend( std::coroutine_handle< PROMISE > coroutine) noexcept
-					{
-						ContinuationPromise& promise = coroutine.promise();
-						if( promise.continuation_ )
-							promise.continuation_.resume();
-					}
+				void await_suspend( std::coroutine_handle< promise_type > coroutine) noexcept
+				{
+					auto& promise = coroutine.promise();
+					if( promise.continuation_ )
+						promise.continuation_.resume();
+				}
 				void await_resume() noexcept {}
 			};
-			ContinuationPromise() noexcept {}
+			promise_type() noexcept {}
 			auto initial_suspend() noexcept { return std::suspend_never{}; }
 			auto final_suspend() noexcept { return ResumeContinuation{}; }
-			void return_value( CONTINUATION::RESULT_TYPE result ) { result_ = result; }
+			void return_value( R result ) { result_ = result; }
 			void unhandled_exception() {}
-			CONTINUATION::RESULT_TYPE result_ = {}; 
+			R result_ = {}; 
 			std::coroutine_handle<> continuation_;
 		};
-
-	template< typename R >
-	struct [[nodiscard]] Continuation 
-	{
-		using RESULT_TYPE = R;
-		using CONTINUATION = Continuation< R >;
-		using promise_type = ContinuationPromise< CONTINUATION >;
-		using CoroutineHandle = std::coroutine_handle< promise_type >;
 
 		Continuation( const Continuation& ) = delete;
 		Continuation& operator=( const Continuation& ) = delete;
 		Continuation& operator=( Continuation&& ) noexcept = delete;
 
 		Continuation( Continuation&& t ) noexcept { coroutine_(t.coroutine_); }
-		explicit Continuation( CoroutineHandle coroutine ) 
+		explicit Continuation( std::coroutine_handle< promise_type > coroutine ) 
 			: coroutine_( coroutine ) 
 		{}
 		~Continuation()
@@ -74,7 +63,7 @@ namespace
 		}
 
 	private:
-		CoroutineHandle coroutine_;
+		std::coroutine_handle< promise_type > coroutine_;
 	};
 
 	template< typename R > using Callback = std::function< void( R ) >;
