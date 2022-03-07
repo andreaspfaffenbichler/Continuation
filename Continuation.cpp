@@ -21,8 +21,8 @@ namespace
 	namespace std_coroutine = std;
 #endif
 
-	template< typename R >
-	struct [[nodiscard]] Continuation 
+	template< typename R = nullptr_t >
+	struct Continuation 
 	{
 		struct promise_type
 		{
@@ -131,7 +131,7 @@ namespace
 		co_return x + 1.0;
 	}
 
-	Continuation< nullptr_t > Test2X()
+	Continuation<> Test2X()
 	{
 		BOOST_TEST_MESSAGE( "Start Test2X" );
 		auto x = co_await Test1aX();
@@ -146,7 +146,7 @@ int main()
 {
 	BOOST_TEST_MESSAGE( "main start" );
 	{
-		auto test = Test2X();
+		Test2X();
 	}
 	BOOST_TEST( !continuationsRun );
 	BOOST_TEST_MESSAGE( "main after Test2X" );
