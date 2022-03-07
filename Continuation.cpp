@@ -39,7 +39,7 @@ namespace
 		Continuation& operator=( const Continuation& ) = delete;
 		Continuation& operator=( Continuation&& ) noexcept = delete;
 
-		Continuation( Continuation&& t ) noexcept { coroutine_(t.coroutine_); }
+		Continuation( Continuation&& t ) noexcept = default;
 		explicit Continuation( std::coroutine_handle< promise_type > coroutine ) 
 			: coroutine_( coroutine ) 
 		{}
