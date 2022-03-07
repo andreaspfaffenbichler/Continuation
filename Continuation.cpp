@@ -145,7 +145,9 @@ namespace
 int main()
 {
 	BOOST_TEST_MESSAGE( "main start" );
-	auto test = Test2X();
+	{
+		auto test = Test2X();
+	}
 	BOOST_TEST( !continuationsRun );
 	BOOST_TEST_MESSAGE( "main after Test2X" );
 	std::this_thread::sleep_for( std::chrono::seconds{ 1 } );
