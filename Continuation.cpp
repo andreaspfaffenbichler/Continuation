@@ -1,10 +1,26 @@
 #include <iostream>
-#include <coroutine>
 #include <thread>
 #include <functional>
 
+ #if defined( WIN32 ) || defined( _CONSOLE )
+#else
+#define EXPERIMENTAL_COROUTINE
+#endif
+
+#ifdef EXPERIMENTAL_COROUTINE
+#include <experimental/coroutine>
+#else
+#include <coroutine>
+#endif
+
 namespace
 {
+#ifdef EXPERIMENTAL_COROUTINE
+	namespace std_coroutine = std::experimental;
+#else
+	namespace std_coroutine = std;
+#endif
+
 	template< typename R >
 	struct [[nodiscard]] Continuation 
 	{
@@ -12,13 +28,13 @@ namespace
 		{
 			Continuation< R > get_return_object() 
 			{
-				return Continuation< R >{ std::coroutine_handle< promise_type >::from_promise( *this ) };
+				return Continuation< R >{ std_coroutine::coroutine_handle< promise_type >::from_promise( *this ) };
 			}
 			struct ResumeContinuation
 			{
 				ResumeContinuation() noexcept {}
 				bool await_ready() const noexcept { return false; }
-				void await_suspend( std::coroutine_handle< promise_type > coroutine) noexcept
+				void await_suspend( std_coroutine::coroutine_handle< promise_type > coroutine) noexcept
 				{
 					auto& promise = coroutine.promise();
 					if( promise.continuation_ )
@@ -27,12 +43,12 @@ namespace
 				void await_resume() noexcept {}
 			};
 			promise_type() noexcept {}
-			auto initial_suspend() noexcept { return std::suspend_never{}; }
+			auto initial_suspend() noexcept { return std_coroutine::suspend_never{}; }
 			auto final_suspend() noexcept { return ResumeContinuation{}; }
 			void return_value( R result ) { result_ = result; }
 			void unhandled_exception() {}
 			R result_ = {}; 
-			std::coroutine_handle<> continuation_;
+			std_coroutine::coroutine_handle<> continuation_;
 		};
 
 		Continuation( const Continuation& ) = delete;
@@ -40,14 +56,14 @@ namespace
 		Continuation& operator=( Continuation&& ) noexcept = delete;
 
 		Continuation( Continuation&& t ) noexcept = default;
-		explicit Continuation( std::coroutine_handle< promise_type > coroutine ) : coroutine_( coroutine ) {}
+		explicit Continuation( std_coroutine::coroutine_handle< promise_type > coroutine ) : coroutine_( coroutine ) {}
 
 		bool await_ready() const noexcept{ return false; }
-		void await_suspend( std::coroutine_handle<> awaitingCoroutine ) noexcept { coroutine_.promise().continuation_ = awaitingCoroutine; }
+		void await_suspend( std_coroutine::coroutine_handle<> awaitingCoroutine ) noexcept { coroutine_.promise().continuation_ = awaitingCoroutine; }
 		auto await_resume() { return coroutine_.promise().result_; }
 
 	private:
-		std::coroutine_handle< promise_type > coroutine_;
+		std_coroutine::coroutine_handle< promise_type > coroutine_;
 	};
 
 	template< typename R > using Callback = std::function< void( R ) >;
@@ -56,9 +72,9 @@ namespace
 		struct CallbackContinuationAwaiter
 		{
 			bool await_ready() { return false; }
-			void await_suspend( std::coroutine_handle<> handle )
+			void await_suspend( std_coroutine::coroutine_handle<> handle )
 			{ 
-				api_( [ this, handle ]( const R& r ) 
+				api_( [ this, handle ]( const R& r ) mutable
 				{ 
 					result_ = r;
 					handle.resume();
