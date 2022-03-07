@@ -2,7 +2,7 @@
 #include <thread>
 #include <functional>
 
-#if defined( WIN32 ) || defined( _CONSOLE )
+#if defined( WIN32 ) || defined( _CONSOLE ) || defined( __GNUC__ )
 #else
 #define EXPERIMENTAL_COROUTINE
 #endif
