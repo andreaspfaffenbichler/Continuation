@@ -34,11 +34,11 @@ namespace
 			{
 				ResumeContinuation() noexcept {}
 				bool await_ready() const noexcept { return false; }
-				void await_suspend( std_coroutine::coroutine_handle< promise_type > coroutine) noexcept
+				void await_suspend( std_coroutine::coroutine_handle< promise_type > thisCoroutine ) noexcept
 				{
-					auto& promise = coroutine.promise();
-					if( promise.continuation_ )
-						promise.continuation_.resume();
+					auto& promise = thisCoroutine.promise();
+					if( promise.callingCoroutine_ )
+						promise.callingCoroutine_.resume();
 				}
 				void await_resume() noexcept {}
 			};
@@ -48,7 +48,7 @@ namespace
 			void return_value( R result ) { result_ = result; }
 			void unhandled_exception() {}
 			R result_ = {}; 
-			std_coroutine::coroutine_handle<> continuation_;
+			std_coroutine::coroutine_handle<> callingCoroutine_;
 		};
 
 		Continuation( const Continuation& ) = delete;
@@ -59,7 +59,7 @@ namespace
 		explicit Continuation( std_coroutine::coroutine_handle< promise_type > coroutine ) : coroutine_( coroutine ) {}
 
 		bool await_ready() const noexcept{ return false; }
-		void await_suspend( std_coroutine::coroutine_handle<> awaitingCoroutine ) noexcept { coroutine_.promise().continuation_ = awaitingCoroutine; }
+		void await_suspend( std_coroutine::coroutine_handle<> callingCoroutine ) noexcept { coroutine_.promise().callingCoroutine_ = callingCoroutine; }
 		auto await_resume() { return coroutine_.promise().result_; }
 
 	private:
