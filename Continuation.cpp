@@ -103,6 +103,7 @@ namespace
 	std::cout << x << std::endl;
 
 	std::thread t;
+	bool continuationsRun = false;
 
 	void api( const std::function< void( int ) >& callback )
 	{
@@ -139,6 +140,7 @@ namespace
 		auto x = co_await Test1aX();
 		BOOST_TEST( x == 44.0 );
 		BOOST_TEST_MESSAGE( "Test2X" );
+		continuationsRun = true;
 		co_return {};
 	}
 }
@@ -147,10 +149,12 @@ int main()
 {
 	BOOST_TEST_MESSAGE( "main start" );
 	auto test = Test2X();
+	BOOST_TEST( !continuationsRun );
 	BOOST_TEST_MESSAGE( "main after Test2X" );
 	std::this_thread::sleep_for( std::chrono::seconds{ 1 } );
 	BOOST_TEST_MESSAGE( "main after sleep" );
 	t.join();
+	BOOST_TEST( continuationsRun );
 	BOOST_TEST_MESSAGE( "after join" );
 }
 
