@@ -40,27 +40,11 @@ namespace
 		Continuation& operator=( Continuation&& ) noexcept = delete;
 
 		Continuation( Continuation&& t ) noexcept = default;
-		explicit Continuation( std::coroutine_handle< promise_type > coroutine ) 
-			: coroutine_( coroutine ) 
-		{}
-		~Continuation()
-		{
-			if( coroutine_ )
-				coroutine_.destroy();
-		}
+		explicit Continuation( std::coroutine_handle< promise_type > coroutine ) : coroutine_( coroutine ) {}
 
-		bool await_ready() const noexcept
-		{
-			return false;
-		}
-		void await_suspend( std::coroutine_handle<> awaitingCoroutine ) noexcept
-		{
-			coroutine_.promise().continuation_ = awaitingCoroutine;
-		}
-		auto await_resume()
-		{
-			return coroutine_.promise().result_; 
-		}
+		bool await_ready() const noexcept{ return false; }
+		void await_suspend( std::coroutine_handle<> awaitingCoroutine ) noexcept { coroutine_.promise().continuation_ = awaitingCoroutine; }
+		auto await_resume() { return coroutine_.promise().result_; }
 
 	private:
 		std::coroutine_handle< promise_type > coroutine_;
@@ -71,9 +55,6 @@ namespace
 	template< typename R >
 		struct CallbackContinuationAwaiter
 		{
-			CallbackContinuationAwaiter( const Api< R > &api )
-				:api_( api ) {}
-
 			bool await_ready() { return false; }
 			void await_suspend( std::coroutine_handle<> handle )
 			{ 
