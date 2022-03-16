@@ -193,14 +193,6 @@ namespace
 			co_return {};
 		}
 	}
-
-	template< typename R >
-		R SyncronizeHack( auto x )
-		{
-			auto coroutine = x();
-			coroutine.Rundown();
-			return coroutine.coroutine_.promise().result_;
-		}
 }
 
 int main()
