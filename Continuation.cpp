@@ -105,7 +105,7 @@ namespace
 		}
 
 	template< typename R > using SyncApi = std::function< R() >;
-	template< typename R >
+	template< typename SYNC_API >
 		struct SyncContinuationAwaiter
 		{
 			bool await_ready() { return false; }
@@ -113,17 +113,23 @@ namespace
 			{ 
 				SyncReturnTo( callingCoroutine ); 
 			}
-			R await_resume() 
+			auto await_resume() 
 			{ 
 				return api_();
 			}
 
-			const SyncApi< R > api_;
+			const SYNC_API api_;
 		};
-	template< typename R >
-		auto SyncContinuation( SyncApi< R > api )
+	template< typename SYNC_API >
+		auto SyncContinuation( SYNC_API api )
 		{
-			return SyncContinuationAwaiter< R >{ api };
+			return SyncContinuationAwaiter< SYNC_API >{ api };
+		}
+
+	template< typename T >
+		auto LiteralContinuation( T value )
+		{
+			return SyncContinuation( [ = ]{ return value; } );
 		}
 
 // TEST
@@ -158,7 +164,7 @@ namespace
 		{
 			int initalValue = 1;
  			BOOST_TEST_MESSAGE( "Start Test1" );
-			int x = co_await callbackContinuation;
+			int x = co_await callbackContinuation();
 			x += initalValue;
 			BOOST_TEST( x == 42 );
 			BOOST_TEST_MESSAGE( "Test1" );
@@ -199,22 +205,29 @@ int main()
 {
 	BOOST_TEST_MESSAGE( "main start" );
 
+	BOOST_TEST_MESSAGE( "return start" );
+	{
+		Test::continuationsRun = false;
+		Test::Test4( []()->Continuation< int >{ co_return co_await LiteralContinuation( 41 ); } );
+		BOOST_TEST( Test::continuationsRun );
+	}
+
 	BOOST_TEST_MESSAGE( "synchron start" );
 	{
 		Test::continuationsRun = false;
-		Test::Test4( SyncContinuation< int >( &Test::apiSync ) );
+		Test::Test4( []()->Continuation< int >{ co_return co_await SyncContinuation( &Test::apiSync ); } );
 		BOOST_TEST( Test::continuationsRun );
 	}
 
 	BOOST_TEST_MESSAGE( "asynchron start" );
 	{
 		Test::continuationsRun = false;
-		Test::Test4( AsyncCallbackContinuation< int >( &Test::apiAsync ) );
+		Test::Test4( []()->Continuation< int >{ co_return co_await AsyncCallbackContinuation< int >( &Test::apiAsync ); } );
 		BOOST_TEST( !Test::continuationsRun );
 	}
 	BOOST_TEST( !Test::continuationsRun );
 	BOOST_TEST_MESSAGE( "main after Test4" );
-	std::this_thread::sleep_for( std::chrono::seconds{ 1 } );
+	//std::this_thread::sleep_for( std::chrono::seconds{ 1 } );
 	BOOST_TEST_MESSAGE( "main after sleep" );
 	Test::t.join();
 	BOOST_TEST( Test::continuationsRun );
