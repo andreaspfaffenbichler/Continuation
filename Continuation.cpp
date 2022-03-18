@@ -127,7 +127,7 @@ namespace
 	std::cout << x << std::endl;
 
 
-	namespace Test
+	namespace Fixture
 	{
 		std::thread t;
 		bool continuationsRun = false;
@@ -150,7 +150,7 @@ namespace
 		{
 			int initalValue = 1;
  			BOOST_TEST_MESSAGE( "Start Test1Async" );
-			int x = co_await AsyncCallbackContinuation< int >( &Test::apiAsync );
+			int x = co_await AsyncCallbackContinuation< int >( &apiAsync );
 			x += initalValue;
 			BOOST_TEST( x == 42 );
 			BOOST_TEST_MESSAGE( "Test1Async" );
@@ -176,7 +176,7 @@ namespace
 		Continuation< int > Test1AsyncWithException()
 		{
  			BOOST_TEST_MESSAGE( "Start Test1AsyncWithException" );
-			int x = co_await AsyncCallbackContinuation< int >( &Test::apiAsync );
+			int x = co_await AsyncCallbackContinuation< int >( &apiAsync );
 			throw std::runtime_error( "TestException" );
 			co_return 42;
 		}
@@ -213,7 +213,7 @@ namespace
 		{
 			BOOST_TEST_MESSAGE( "Start Test5Catched" );
 
-			Test::continuationsRun = false;
+			continuationsRun = false;
 			try
 			{
 				co_await Test4( throws );
@@ -223,7 +223,7 @@ namespace
 			{
 				BOOST_TEST( e.what() == std::string( "TestException" ) );
 			}
-			BOOST_TEST( !Test::continuationsRun );
+			BOOST_TEST( !continuationsRun );
 			co_return {};
 		}
 	}
@@ -233,43 +233,36 @@ int main()
 {
 	BOOST_TEST_MESSAGE( "main start" );
 
-	//BOOST_TEST_MESSAGE( "return start" );
-	//{
-	//	Test::continuationsRun = false;
-	//	Test::Test4( []()->Continuation< int >{ co_return co_await AwaitableLiteral( 41 ); } );
-	//	BOOST_TEST( Test::continuationsRun );
-	//}
-
 	BOOST_TEST_MESSAGE( "synchron start" );
 	{
-		Test::continuationsRun = false;
-		Test::Test4( &Test::Test1Sync );
-		BOOST_TEST( Test::continuationsRun );
+		Fixture::continuationsRun = false;
+		Fixture::Test4( &Fixture::Test1Sync );
+		BOOST_TEST( Fixture::continuationsRun );
 	}
 
 	BOOST_TEST_MESSAGE( "synchron start with exception" );
 	{
-		Test::Test5Catched( &Test::Test1SyncWithException );
+		Fixture::Test5Catched( &Fixture::Test1SyncWithException );
 	}
 
 	BOOST_TEST_MESSAGE( "synchron astart with exception" );
 	{
-		Test::Test5Catched( &Test::Test1AsyncWithException );
-		Test::t.join();
+		Fixture::Test5Catched( &Fixture::Test1AsyncWithException );
+		Fixture::t.join();
 	}
 
 	BOOST_TEST_MESSAGE( "asynchron start" );
 	{
-		Test::continuationsRun = false;
-		Test::Test4( &Test::Test1Async );
-		BOOST_TEST( !Test::continuationsRun );
+		Fixture::continuationsRun = false;
+		Fixture::Test4( &Fixture::Test1Async );
+		BOOST_TEST( !Fixture::continuationsRun );
 	}
-	BOOST_TEST( !Test::continuationsRun );
+	BOOST_TEST( !Fixture::continuationsRun );
 	BOOST_TEST_MESSAGE( "main after Test4" );
 	//std::this_thread::sleep_for( std::chrono::seconds{ 1 } );
 	BOOST_TEST_MESSAGE( "main after sleep" );
-	Test::t.join();
-	BOOST_TEST( Test::continuationsRun );
+	Fixture::t.join();
+	BOOST_TEST( Fixture::continuationsRun );
 	BOOST_TEST_MESSAGE( "after join" );
 }
 
