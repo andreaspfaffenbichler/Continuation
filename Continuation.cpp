@@ -15,6 +15,8 @@
 
 namespace
 {
+	template< typename R = nullptr_t > struct Continuation;
+
 #ifdef EXPERIMENTAL_COROUTINE
 	namespace std_coroutine = std::experimental;
 #else
@@ -27,7 +29,7 @@ namespace
 		callingCoroutine.resume();
 	}
 
-	template< typename R = nullptr_t >
+	template< typename R >
 	struct Continuation 
 	{
 		struct promise_type
@@ -63,6 +65,7 @@ namespace
 		Continuation& operator=( const Continuation& ) = delete;
 		Continuation& operator=( Continuation&& ) noexcept = delete;
 
+		Continuation() noexcept = default;
 		Continuation( Continuation&& t ) noexcept = default;
 		explicit Continuation( std_coroutine::coroutine_handle< promise_type > coroutine ) : coroutine_( coroutine ) {}
 
@@ -79,8 +82,8 @@ namespace
 		std_coroutine::coroutine_handle< promise_type > coroutine_;
 	};
 
-	template< typename R > using Callback = std::function< void( R ) >;
-	template< typename R > using AsyncApi = std::function< void( Callback< R > ) >;
+	template< typename R > using AsyncApiCallback = std::function< void( R ) >;
+	template< typename R > using AsyncApi = std::function< void( AsyncApiCallback< R > ) >;
 	template< typename R >
 		struct AsyncCallbackContinuationAwaiter
 		{
@@ -104,9 +107,8 @@ namespace
 			return AsyncCallbackContinuationAwaiter< R >{ api };
 		}
 
-	template< typename R > using SyncApi = std::function< R() >;
-	template< typename SYNC_API >
-		struct SyncContinuationAwaiter
+	template< typename R > 
+		struct LiteralAwaiter
 		{
 			bool await_ready() { return false; }
 			void await_suspend( auto callingCoroutine )
@@ -115,22 +117,19 @@ namespace
 			}
 			auto await_resume() 
 			{ 
-				return api_();
+				return result_;
 			}
-
-			const SYNC_API api_;
+			const R result_;
 		};
-	template< typename SYNC_API >
-		auto SyncContinuation( SYNC_API api )
+	template< typename R >
+	auto AwaitableLiteral( R value = R {} )
 		{
-			return SyncContinuationAwaiter< SYNC_API >{ api };
+			return LiteralAwaiter{ value };
 		}
-
-	template< typename T >
-		auto LiteralContinuation( T value )
-		{
-			return SyncContinuation( [ = ]{ return value; } );
-		}
+	inline auto AwaitableVoid()
+	{
+		return AwaitableLiteral( nullptr );
+	}
 
 // TEST
 #define BOOST_TEST( x ) \
@@ -208,14 +207,14 @@ int main()
 	BOOST_TEST_MESSAGE( "return start" );
 	{
 		Test::continuationsRun = false;
-		Test::Test4( []()->Continuation< int >{ co_return co_await LiteralContinuation( 41 ); } );
+		Test::Test4( []()->Continuation< int >{ co_return co_await AwaitableLiteral( 41 ); } );
 		BOOST_TEST( Test::continuationsRun );
 	}
 
 	BOOST_TEST_MESSAGE( "synchron start" );
 	{
 		Test::continuationsRun = false;
-		Test::Test4( []()->Continuation< int >{ co_return co_await SyncContinuation( &Test::apiSync ); } );
+		Test::Test4( []()->Continuation< int >{ co_return co_await AwaitableLiteral( Test::apiSync() ); } );
 		BOOST_TEST( Test::continuationsRun );
 	}
 
