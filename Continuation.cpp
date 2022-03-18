@@ -23,10 +23,10 @@ namespace
 	namespace std_coroutine = std;
 #endif
 
-	void SyncReturnTo( auto callingCoroutine )
+	void BuildAsyncChain( auto suspendedCoroutine,  auto callingCoroutine )
 	{
-		callingCoroutine.promise().sync_ = true; 
-		callingCoroutine.resume();
+		suspendedCoroutine.promise().callingCoroutine_ = callingCoroutine; 
+		callingCoroutine.promise().sync_ = false; 
 	}
 
 	template< typename R >
@@ -58,7 +58,7 @@ namespace
 			void unhandled_exception() {}
 			R result_ = {}; 
 			std_coroutine::coroutine_handle<> callingCoroutine_;
-			bool sync_ = false;
+			bool sync_ = true;
 		};
 
 		Continuation( const Continuation& ) = delete;
@@ -73,9 +73,9 @@ namespace
 		void await_suspend( auto callingCoroutine ) noexcept 
 		{ 
 			if( coroutine_.promise().sync_ )
-				SyncReturnTo( callingCoroutine ); 
+				callingCoroutine.resume();
 			else
-				coroutine_.promise().callingCoroutine_ = callingCoroutine; 
+				BuildAsyncChain( this->coroutine_, callingCoroutine );
 		}
 		auto await_resume() { return coroutine_.promise().result_; }
 
@@ -88,12 +88,13 @@ namespace
 		struct AsyncCallbackContinuationAwaiter
 		{
 			bool await_ready() { return false; }
-			void await_suspend( std_coroutine::coroutine_handle<> handle )
+			void await_suspend( auto callingContinuation )
 			{ 
-				api_( [ this, handle ]( const R& r ) mutable
+				callingContinuation.promise().sync_ = false;
+				api_( [ this, callingContinuation ]( const R& r ) mutable
 				{ 
 					result_ = r;
-					handle.resume();
+					callingContinuation.resume();
 				});
 			}
 			R await_resume() { return result_; }
@@ -107,29 +108,6 @@ namespace
 			return AsyncCallbackContinuationAwaiter< R >{ api };
 		}
 
-	template< typename R > 
-		struct LiteralAwaiter
-		{
-			bool await_ready() { return false; }
-			void await_suspend( auto callingCoroutine )
-			{ 
-				SyncReturnTo( callingCoroutine ); 
-			}
-			auto await_resume() 
-			{ 
-				return result_;
-			}
-			const R result_;
-		};
-	template< typename R >
-	auto AwaitableLiteral( R value = R {} )
-		{
-			return LiteralAwaiter{ value };
-		}
-	inline auto AwaitableVoid()
-	{
-		return AwaitableLiteral( nullptr );
-	}
 
 // TEST
 #define BOOST_TEST( x ) \
@@ -159,21 +137,31 @@ namespace
 			return 41;
 		}
 
-		Continuation< int > Test1( auto&& callbackContinuation )
+		Continuation< int > Test1Async()
 		{
 			int initalValue = 1;
- 			BOOST_TEST_MESSAGE( "Start Test1" );
-			int x = co_await callbackContinuation();
+ 			BOOST_TEST_MESSAGE( "Start Test1Async" );
+			int x = co_await AsyncCallbackContinuation< int >( &Test::apiAsync );
 			x += initalValue;
 			BOOST_TEST( x == 42 );
-			BOOST_TEST_MESSAGE( "Test1" );
+			BOOST_TEST_MESSAGE( "Test1Async" );
+			co_return x += 1;
+		}
+		Continuation< int > Test1Sync()
+		{
+			int initalValue = 1;
+ 			BOOST_TEST_MESSAGE( "Start Test1Sync" );
+			int x = 41;
+			x += initalValue;
+			BOOST_TEST( x == 42 );
+			BOOST_TEST_MESSAGE( "Test1Sync" );
 			co_return x += 1;
 		}
 
-		Continuation< double > Test2( auto&& callbackContinuation )
+		Continuation< double > Test2( auto&& test1 )
 		{
 			BOOST_TEST_MESSAGE( "Start Test2" );
-			auto x = co_await Test1( callbackContinuation );
+			auto x = co_await test1();
 			BOOST_TEST( x == 43 );
 			BOOST_TEST_MESSAGE( "Test2" );
 			co_return x + 1.0;
@@ -204,24 +192,24 @@ int main()
 {
 	BOOST_TEST_MESSAGE( "main start" );
 
-	BOOST_TEST_MESSAGE( "return start" );
-	{
-		Test::continuationsRun = false;
-		Test::Test4( []()->Continuation< int >{ co_return co_await AwaitableLiteral( 41 ); } );
-		BOOST_TEST( Test::continuationsRun );
-	}
+	//BOOST_TEST_MESSAGE( "return start" );
+	//{
+	//	Test::continuationsRun = false;
+	//	Test::Test4( []()->Continuation< int >{ co_return co_await AwaitableLiteral( 41 ); } );
+	//	BOOST_TEST( Test::continuationsRun );
+	//}
 
 	BOOST_TEST_MESSAGE( "synchron start" );
 	{
 		Test::continuationsRun = false;
-		Test::Test4( []()->Continuation< int >{ co_return co_await AwaitableLiteral( Test::apiSync() ); } );
+		Test::Test4( &Test::Test1Sync );
 		BOOST_TEST( Test::continuationsRun );
 	}
 
 	BOOST_TEST_MESSAGE( "asynchron start" );
 	{
 		Test::continuationsRun = false;
-		Test::Test4( []()->Continuation< int >{ co_return co_await AsyncCallbackContinuation< int >( &Test::apiAsync ); } );
+		Test::Test4( &Test::Test1Async );
 		BOOST_TEST( !Test::continuationsRun );
 	}
 	BOOST_TEST( !Test::continuationsRun );
