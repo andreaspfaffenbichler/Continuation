@@ -55,9 +55,13 @@ namespace
 			auto initial_suspend() noexcept { return std_coroutine::suspend_never{}; }
 			auto final_suspend() noexcept { return ResumeContinuation{}; }
 			void return_value( R result ) { result_ = result; }
-			void unhandled_exception() {}
+			void unhandled_exception() noexcept
+			{
+				exception_ = std::current_exception();
+			}
 			R result_ = {}; 
 			std_coroutine::coroutine_handle<> callingCoroutine_;
+			std::exception_ptr exception_ = {};
 			bool sync_ = true;
 		};
 
@@ -77,7 +81,12 @@ namespace
 			else
 				BuildAsyncChain( this->coroutine_, callingCoroutine );
 		}
-		auto await_resume() { return coroutine_.promise().result_; }
+		auto await_resume() 
+		{ 
+			if( auto exception = coroutine_.promise().exception_ )
+				std::rethrow_exception( exception );
+			return coroutine_.promise().result_; 
+		}
 
 		std_coroutine::coroutine_handle< promise_type > coroutine_;
 	};
@@ -127,7 +136,7 @@ namespace
 		{
 			t = std::thread( [ = ] 
 			{ 
-				std::this_thread::sleep_for( std::chrono::seconds{ 5 } );
+				std::this_thread::sleep_for( std::chrono::seconds{ 1 } );
 				callback( 41 );
 			});
 		}
@@ -157,6 +166,20 @@ namespace
 			BOOST_TEST_MESSAGE( "Test1Sync" );
 			co_return x += 1;
 		}
+		Continuation< int > Test1SyncWithException()
+		{
+ 			BOOST_TEST_MESSAGE( "Start Test1SyncWithException" );
+			throw std::runtime_error( "TestException" );
+			co_return 42;
+		}
+
+		Continuation< int > Test1AsyncWithException()
+		{
+ 			BOOST_TEST_MESSAGE( "Start Test1AsyncWithException" );
+			int x = co_await AsyncCallbackContinuation< int >( &Test::apiAsync );
+			throw std::runtime_error( "TestException" );
+			co_return 42;
+		}
 
 		Continuation< double > Test2( auto&& test1 )
 		{
@@ -185,6 +208,24 @@ namespace
 			continuationsRun = true;
 			co_return {};
 		}
+
+		Continuation<> Test5Catched( auto&& throws )
+		{
+			BOOST_TEST_MESSAGE( "Start Test5Catched" );
+
+			Test::continuationsRun = false;
+			try
+			{
+				co_await Test4( throws );
+				BOOST_TEST( false );
+			}
+			catch( std::runtime_error& e )
+			{
+				BOOST_TEST( e.what() == std::string( "TestException" ) );
+			}
+			BOOST_TEST( !Test::continuationsRun );
+			co_return {};
+		}
 	}
 }
 
@@ -204,6 +245,17 @@ int main()
 		Test::continuationsRun = false;
 		Test::Test4( &Test::Test1Sync );
 		BOOST_TEST( Test::continuationsRun );
+	}
+
+	BOOST_TEST_MESSAGE( "synchron start with exception" );
+	{
+		Test::Test5Catched( &Test::Test1SyncWithException );
+	}
+
+	BOOST_TEST_MESSAGE( "synchron astart with exception" );
+	{
+		Test::Test5Catched( &Test::Test1AsyncWithException );
+		Test::t.join();
 	}
 
 	BOOST_TEST_MESSAGE( "asynchron start" );
