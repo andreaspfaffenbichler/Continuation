@@ -49,6 +49,7 @@ namespace
 					auto& promise = thisCoroutine.promise();
 					if( promise.callingCoroutine_ )
 						promise.callingCoroutine_.resume();
+					thisCoroutine.destroy();
 				}
 				void await_resume() noexcept {}
 			};
