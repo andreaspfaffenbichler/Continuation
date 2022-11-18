@@ -1,3 +1,6 @@
+#define CONTINUATION_TEST
+
+
 #include <iostream>
 #include <thread>
 #include <functional>
@@ -29,12 +32,27 @@ namespace
 		callingCoroutine.promise().sync_ = false; 
 	}
 
+#ifdef CONTINUATION_TEST
+	static int ContinuationPromiseCount = 0;
+#endif
+
 	template< typename R >
 	struct Continuation 
 	{
 		struct promise_type
 		{
-			promise_type() noexcept {}
+			promise_type() noexcept 
+			{
+#ifdef CONTINUATION_TEST			
+				++ContinuationPromiseCount;
+#endif
+			}
+			~promise_type() noexcept 
+			{
+#ifdef CONTINUATION_TEST			
+				--ContinuationPromiseCount;
+#endif
+			}
 			Continuation< R > get_return_object() 
 			{
 				return Continuation< R >{ std_coroutine::coroutine_handle< promise_type >::from_promise( *this ) };
@@ -49,7 +67,8 @@ namespace
 					auto& promise = thisCoroutine.promise();
 					if( promise.callingCoroutine_ )
 						promise.callingCoroutine_.resume();
-					thisCoroutine.destroy();
+					if( !promise.awaited_ )
+						thisCoroutine.destroy();
 				}
 				void await_resume() noexcept {}
 			};
@@ -61,9 +80,10 @@ namespace
 				exception_ = std::current_exception();
 			}
 			R result_ = {}; 
-			std_coroutine::coroutine_handle<> callingCoroutine_;
+			std_coroutine::coroutine_handle<> callingCoroutine_ = {};
 			std::exception_ptr exception_ = {};
 			bool sync_ = true;
+			bool awaited_ = true;
 		};
 
 		Continuation( const Continuation& ) = delete;
@@ -73,6 +93,13 @@ namespace
 		Continuation() noexcept = default;
 		Continuation( Continuation&& t ) noexcept = default;
 		explicit Continuation( std_coroutine::coroutine_handle< promise_type > coroutine ) : coroutine_( coroutine ) {}
+		~Continuation() noexcept
+		{
+			if( coroutine_.promise().sync_ )
+				coroutine_.destroy();
+			else
+				coroutine_.promise().awaited_ = false;
+		}
 
 		bool await_ready() const noexcept{ return false; }
 		void await_suspend( auto callingCoroutine ) noexcept 
@@ -82,11 +109,27 @@ namespace
 			else
 				BuildAsyncChain( this->coroutine_, callingCoroutine );
 		}
+
+		struct DestroyCoroutine
+		{
+			std_coroutine::coroutine_handle< promise_type > coroutine_;
+			DestroyCoroutine( std_coroutine::coroutine_handle< promise_type > coroutine )
+				: coroutine_( coroutine )
+			{}
+			~DestroyCoroutine()
+			{
+				coroutine_.destroy();
+			}
+		};
+
 		auto await_resume() 
 		{ 
 			if( auto exception = coroutine_.promise().exception_ )
 				std::rethrow_exception( exception );
-			return coroutine_.promise().result_; 
+			auto result = coroutine_.promise().result_; 
+			if( !coroutine_.promise().awaited_ )
+				coroutine_.destroy();
+			return result; 
 		}
 
 		std_coroutine::coroutine_handle< promise_type > coroutine_;
@@ -233,37 +276,72 @@ namespace
 int main()
 {
 	BOOST_TEST_MESSAGE( "main start" );
-
-	BOOST_TEST_MESSAGE( "synchron start" );
 	{
-		Fixture::continuationsRun = false;
-		Fixture::Test4( &Fixture::Test1Sync );
-		BOOST_TEST( Fixture::continuationsRun );
-	}
+		BOOST_TEST_MESSAGE( "Test1Sync start" );
+		{
+			auto x = Fixture::Test1Sync();
+		}
+		BOOST_TEST_MESSAGE( ContinuationPromiseCount );
+		BOOST_TEST( ContinuationPromiseCount == 0 );
 
-	BOOST_TEST_MESSAGE( "synchron start with exception" );
-	{
-		Fixture::Test5Catched( &Fixture::Test1SyncWithException );
-	}
+		BOOST_TEST_MESSAGE( "synchron start" );
+		{
+			Fixture::continuationsRun = false;
+			Fixture::Test4( &Fixture::Test1Sync );
+			BOOST_TEST( Fixture::continuationsRun );
+		}
+		BOOST_TEST_MESSAGE( ContinuationPromiseCount );
+		BOOST_TEST( ContinuationPromiseCount == 0 );
 
-	BOOST_TEST_MESSAGE( "synchron astart with exception" );
-	{
-		Fixture::Test5Catched( &Fixture::Test1AsyncWithException );
-		Fixture::t.join();
-	}
+		BOOST_TEST_MESSAGE( "synchron start with exception" );
+		{
+			Fixture::Test5Catched( &Fixture::Test1SyncWithException );
+		}
+		BOOST_TEST_MESSAGE( ContinuationPromiseCount );
+		BOOST_TEST( ContinuationPromiseCount == 0 );
 
-	BOOST_TEST_MESSAGE( "asynchron start" );
-	{
-		Fixture::continuationsRun = false;
-		Fixture::Test4( &Fixture::Test1Async );
+		BOOST_TEST_MESSAGE( "asynchron simple start with exception" );
+		{
+			[]()->Continuation<>
+			{
+				BOOST_TEST_MESSAGE( "asynchron simple start with exception Catched" );
+				try
+				{
+					co_await Fixture::Test1AsyncWithException();
+					BOOST_TEST( false );
+				}
+				catch( std::runtime_error& e )
+				{
+					BOOST_TEST( e.what() == std::string( "TestException" ) );
+				}
+				co_return {};
+			}();
+			Fixture::t.join();
+		}
+
+		BOOST_TEST_MESSAGE( "asynchron start with exception" );
+		{
+			Fixture::Test5Catched( &Fixture::Test1AsyncWithException );
+			Fixture::t.join();
+		}
+		BOOST_TEST_MESSAGE( ContinuationPromiseCount );
+		BOOST_TEST( ContinuationPromiseCount == 0 );
+
+		BOOST_TEST_MESSAGE( "asynchron start" );
+		{
+			Fixture::continuationsRun = false;
+			Fixture::Test4( &Fixture::Test1Async );
+			BOOST_TEST( !Fixture::continuationsRun );
+		}
 		BOOST_TEST( !Fixture::continuationsRun );
+		BOOST_TEST_MESSAGE( "main after Test4" );
+		//std::this_thread::sleep_for( std::chrono::seconds{ 1 } );
+		BOOST_TEST_MESSAGE( "main after sleep" );
+		Fixture::t.join();
+		BOOST_TEST( Fixture::continuationsRun );
+		BOOST_TEST_MESSAGE( "after join" );
+		BOOST_TEST_MESSAGE( ContinuationPromiseCount );
+		BOOST_TEST( ContinuationPromiseCount == 0 );
 	}
-	BOOST_TEST( !Fixture::continuationsRun );
-	BOOST_TEST_MESSAGE( "main after Test4" );
-	//std::this_thread::sleep_for( std::chrono::seconds{ 1 } );
-	BOOST_TEST_MESSAGE( "main after sleep" );
-	Fixture::t.join();
-	BOOST_TEST( Fixture::continuationsRun );
-	BOOST_TEST_MESSAGE( "after join" );
 }
 
