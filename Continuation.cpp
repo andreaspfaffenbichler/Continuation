@@ -109,19 +109,6 @@ namespace
 			else
 				BuildAsyncChain( this->coroutine_, callingCoroutine );
 		}
-
-		struct DestroyCoroutine
-		{
-			std_coroutine::coroutine_handle< promise_type > coroutine_;
-			DestroyCoroutine( std_coroutine::coroutine_handle< promise_type > coroutine )
-				: coroutine_( coroutine )
-			{}
-			~DestroyCoroutine()
-			{
-				coroutine_.destroy();
-			}
-		};
-
 		auto await_resume() 
 		{ 
 			if( auto exception = coroutine_.promise().exception_ )
